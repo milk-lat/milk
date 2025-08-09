@@ -2,18 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
 
 const links = [
   { href: "/", label: "首页" },
+  { href: "/lab", label: "功能实验室" },
   { href: "/blog", label: "博客" },
-  { href: "/todos", label: "待办" },
-  { href: "/search", label: "搜索" },
 ];
 
 export default function NavBar() {
   const pathname = usePathname();
-  const { data: session } = useSession();
 
   return (
     <header className="w-full border-b border-black/[.08] dark:border-white/[.145]">
@@ -33,19 +30,6 @@ export default function NavBar() {
               {l.label}
             </Link>
           ))}
-          {session ? (
-            <>
-              <Link href="/account">账号</Link>
-              <button onClick={() => signOut()} className="px-2 py-1 rounded bg-foreground text-background">
-                退出
-              </button>
-            </>
-          ) : (
-            <>
-              <Link href="/login">登录</Link>
-              <Link href="/register">注册</Link>
-            </>
-          )}
         </nav>
       </div>
     </header>
