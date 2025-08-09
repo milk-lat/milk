@@ -9,7 +9,6 @@ export default function CalculatorPage() {
     try {
       // very basic safe eval: allow digits, operators, dot and parentheses
       if (!/^[-+*/().\d\s]+$/.test(expr)) throw new Error("非法表达式");
-      // eslint-disable-next-line no-new-func
       const val = Function(`return (${expr})`)();
       setResult(String(val));
     } catch {
