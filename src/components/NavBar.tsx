@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "首页" },
+  { href: "/games", label: "小游戏" },
   { href: "/lab", label: "功能实验室" },
   { href: "/blog", label: "博客" },
 ];
