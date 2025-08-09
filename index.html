@@ -1,218 +1,37 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-    <title>AI 神经网络可视化</title>
-    <meta name="description" content="一个交互式的 AI 神经网络可视化演示网站：可调网络结构、激活函数、学习率，实时查看训练过程与数据分布。" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <div id="bg">
-      <canvas id="bg-canvas"></canvas>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Neuron Catcher - Pixel Edition</title>
+<link rel="stylesheet" href="styles.css">
+<!-- 像素字体 -->
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header>
+    <h1>Neuron Catcher</h1>
+    <p class="sub">方向键 / WASD 控制，吃绿色数据 +1，碰到红色 -1</p >
+    <div class="controls">
+      <button id="startBtn">开始</button>
+      <button id="pauseBtn">暂停</button>
+      <button id="muteBtn">静音</button>
     </div>
+    <div class="hud">
+      <span id="score">分数: 0</span>
+      <span id="level">难度: 1</span>
+      <span id="lives">生命: 3</span>
+    </div>
+  </header>
 
-    <header class="site-header">
-      <div class="header-inner">
-        <div class="brand">
-          <span class="logo">🧠</span>
-          <span class="name">AI 神经网络可视化</span>
-        </div>
-        <nav class="nav">
-          <a href="#demo">演示</a>
-          <a href="#datasets">数据集</a>
-          <a href="#insights">知识卡片</a>
-          <a href="#about">关于</a>
-        </nav>
-      </div>
-    </header>
+  <main>
+    <canvas id="gameCanvas"></canvas>
+  </main>
 
-    <section class="hero">
-      <div class="hero-content">
-        <h1>可交互的神经网络演示</h1>
-        <p>调整网络结构、激活函数与学习率，观察训练过程、决策边界、损失与准确率的动态变化。</p>
-        <div class="hero-actions">
-          <a href="#demo" class="btn primary">开始探索</a>
-          <button id="toggle-theme" class="btn ghost">切换主题</button>
-        </div>
-      </div>
-    </section>
+  <footer>
+    <small>像素风版改造示例</small>
+  </footer>
 
-    <main class="container" id="demo">
-      <section class="playground">
-        <div class="stage">
-          <div class="stage-top">
-            <div class="stage-card">
-              <div class="stage-card-header">
-                <h2>网络拓扑与前向传播</h2>
-                <div class="stage-actions">
-                  <button id="btn-play" class="btn small">▶ 训练</button>
-                  <button id="btn-pause" class="btn small">⏸ 暂停</button>
-                  <button id="btn-reset" class="btn small">↺ 重置</button>
-                </div>
-              </div>
-              <canvas id="nn-canvas" width="800" height="420" aria-label="神经网络结构渲染"></canvas>
-            </div>
-          </div>
-
-          <div class="stage-bottom">
-            <div class="stage-card">
-              <div class="stage-card-header">
-                <h3>数据分布与决策边界</h3>
-                <div class="legend">
-                  <span class="legend-item"><span class="dot c0"></span>类别 0</span>
-                  <span class="legend-item"><span class="dot c1"></span>类别 1</span>
-                  <span class="legend-item"><span class="dot c2"></span>类别 2</span>
-                </div>
-              </div>
-              <canvas id="data-canvas" width="800" height="420" aria-label="数据与决策边界"></canvas>
-            </div>
-            <div class="stage-card">
-              <div class="stage-card-header">
-                <h3>训练曲线</h3>
-                <div class="stage-actions">
-                  <label class="switch"><input type="checkbox" id="smooth-curve" checked /><span>平滑曲线</span></label>
-                </div>
-              </div>
-              <div class="charts">
-                <canvas id="loss-canvas" width="800" height="200" aria-label="损失曲线"></canvas>
-                <canvas id="acc-canvas" width="800" height="200" aria-label="准确率曲线"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <aside class="controls">
-          <div class="panel">
-            <h3>网络配置</h3>
-            <div class="field">
-              <label for="layers">隐藏层数: <span id="layers-val">2</span></label>
-              <input type="range" id="layers" min="1" max="5" step="1" value="2" />
-            </div>
-            <div class="field">
-              <label for="neurons">每层神经元: <span id="neurons-val">8</span></label>
-              <input type="range" id="neurons" min="3" max="24" step="1" value="8" />
-            </div>
-            <div class="field">
-              <label for="activation">激活函数</label>
-              <select id="activation">
-                <option value="relu" selected>ReLU</option>
-                <option value="tanh">Tanh</option>
-                <option value="sigmoid">Sigmoid</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="classes">类别数: <span id="classes-val">2</span></label>
-              <input type="range" id="classes" min="2" max="3" step="1" value="2" />
-            </div>
-          </div>
-
-          <div class="panel">
-            <h3>训练参数</h3>
-            <div class="field">
-              <label for="lr">学习率: <span id="lr-val">0.05</span></label>
-              <input type="range" id="lr" min="0.001" max="0.5" step="0.001" value="0.05" />
-            </div>
-            <div class="field">
-              <label for="batch">批大小: <span id="batch-val">32</span></label>
-              <input type="range" id="batch" min="8" max="128" step="8" value="32" />
-            </div>
-            <div class="field">
-              <label for="noise">数据噪声: <span id="noise-val">0.08</span></label>
-              <input type="range" id="noise" min="0" max="0.5" step="0.01" value="0.08" />
-            </div>
-            <div class="field inline">
-              <label class="switch"><input type="checkbox" id="shuffle" checked /><span>随机打乱</span></label>
-              <label class="switch"><input type="checkbox" id="reg" /><span>L2 正则</span></label>
-            </div>
-          </div>
-
-          <div class="panel">
-            <h3>数据集</h3>
-            <div class="field">
-              <label for="dataset">类型</label>
-              <select id="dataset">
-                <option value="moons" selected>双月 (moons)</option>
-                <option value="circles">同心圆 (circles)</option>
-                <option value="spiral">螺旋 (spiral)</option>
-                <option value="gaussians">高斯簇 (gaussians)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="samples">样本数: <span id="samples-val">400</span></label>
-              <input type="range" id="samples" min="100" max="2000" step="50" value="400" />
-            </div>
-            <button id="regen" class="btn block">生成数据</button>
-          </div>
-        </aside>
-      </section>
-    </main>
-
-    <section class="info" id="datasets">
-      <div class="info-grid">
-        <div class="info-card">
-          <h4>双月 Moons</h4>
-          <p>两个相嵌的半环，非线性可分。适合验证网络对弯曲边界的拟合能力。</p>
-        </div>
-        <div class="info-card">
-          <h4>同心圆 Circles</h4>
-          <p>多个同心圆，中心对称。考察网络对径向模式的表达能力。</p>
-        </div>
-        <div class="info-card">
-          <h4>螺旋 Spiral</h4>
-          <p>多臂螺旋数据，强非线性。经典难例，需更深层网络或合适激活函数。</p>
-        </div>
-        <div class="info-card">
-          <h4>高斯簇 Gaussians</h4>
-          <p>多个高斯簇随机分布，类间可控重叠。用于快速对比学习率与正则化影响。</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="insights" id="insights">
-      <div class="insights-grid">
-        <div class="insight">
-          <h4>激活函数</h4>
-          <ul>
-            <li>ReLU: 快速收敛，稀疏激活，可能出现“死亡 ReLU”。</li>
-            <li>Tanh: 零均值，容易饱和，适合较浅网络。</li>
-            <li>Sigmoid: 概率输出常用，梯度消失较明显。</li>
-          </ul>
-        </div>
-        <div class="insight">
-          <h4>过拟合与正则</h4>
-          <p>当模型复杂度超出数据所需，训练准确率高但泛化差。L2 正则通过惩罚大权重抑制过拟合。</p>
-        </div>
-        <div class="insight">
-          <h4>学习率</h4>
-          <p>学习率过大可能震荡甚至发散，过小则收敛缓慢。建议从 1e-2 到 1e-1 区间试验。</p>
-        </div>
-        <div class="insight">
-          <h4>可视化提示</h4>
-          <p>边的颜色/粗细反映权重符号/大小，节点亮度反映激活强度，背景热力图代表决策置信度。</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="about" id="about">
-      <div class="about-inner">
-        <h3>关于本演示</h3>
-        <p>本网站为教学与演示用途，使用纯原生 Canvas 实时计算与渲染，无需第三方依赖，可直接本地打开运行。</p>
-        <p>欢迎在课堂教学、讲座或自学中使用本工具，探索神经网络的工作原理。</p>
-      </div>
-    </section>
-
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <span>© 2025 AI 神经网络可视化</span>
-        <a href="#" id="save-config">导出配置</a>
-        <a href="#" id="load-config">导入配置</a>
-      </div>
-    </footer>
-
-    <script src="./app.js"></script>
-  </body>
+<script src="script.js"></script>
+</body>
 </html>
