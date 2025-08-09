@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>翻牌记忆 - 小游戏乐园</title>
+  <link rel="stylesheet" href="../../styles.css">
+  <style>
+    .grid { display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 520px; margin: 16px auto; }
+    .cardx { aspect-ratio: 1/1; border-radius: 12px; position: relative; transform-style: preserve-3d; transition: transform .3s ease; }
+    .cardx.flip { transform: rotateY(180deg); }
+    .face { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size: 34px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; backface-visibility: hidden; }
+    .front { background: rgba(255,255,255,.06); }
+    .back { background: linear-gradient(135deg, #6ea8fe, #8ef0a4); transform: rotateY(180deg); }
+    .hud { text-align:center; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="game-page">
+    <div class="game-header">
+      <a class="back" href="../../">← 返回首页</a>
+      <h2>翻牌记忆</h2>
+      <div class="game-actions"><button id="resetBtn">重开</button></div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div class="hud"><span id="moves">步数：0</span> · <span id="found">配对：0/8</span></div>
+  </div>
+
+  <script>
+    const EMOJIS = ['🍎','🍌','🍒','🍇','🍉','🍑','🥝','🍍'];
+    const grid = document.getElementById('grid');
+    const movesEl = document.getElementById('moves');
+    const foundEl = document.getElementById('found');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let cards, first, lock, moves, foundPairs;
+
+    function shuffle(array) { for (let i = array.length-1; i>0; i--) { const j = Math.floor(Math.random()*(i+1)); [array[i], array[j]] = [array[j], array[i]]; } return array; }
+
+    function setup() {
+      const list = shuffle([...EMOJIS, ...EMOJIS]);
+      grid.innerHTML = '';
+      cards = list.map((emoji, idx) => {
+        const el = document.createElement('div');
+        el.className = 'cardx';
+        el.dataset.emoji = emoji;
+        el.innerHTML = `<div class="face front"></div><div class="face back">${emoji}</div>`;
+        el.addEventListener('click', () => flip(el));
+        grid.appendChild(el);
+        return el;
+      });
+      first = null; lock = false; moves = 0; foundPairs = 0;
+      movesEl.textContent = '步数：0';
+      foundEl.textContent = '配对：0/8';
+    }
+
+    function flip(card) {
+      if (lock || card.classList.contains('done') || card === first) return;
+      card.classList.add('flip');
+      if (!first) { first = card; return; }
+      moves += 1; movesEl.textContent = `步数：${moves}`;
+      if (card.dataset.emoji === first.dataset.emoji) {
+        // match
+        card.classList.add('done'); first.classList.add('done');
+        first = null; foundPairs += 1; foundEl.textContent = `配对：${foundPairs}/8`;
+        if (foundPairs === 8) setTimeout(() => alert(`完成！总步数：${moves}`), 150);
+      } else {
+        lock = true;
+        setTimeout(() => { card.classList.remove('flip'); first.classList.remove('flip'); first = null; lock = false; }, 750);
+      }
+    }
+
+    resetBtn.addEventListener('click', setup);
+    setup();
+  </script>
+</body>
+</html>
