@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* Base styles for white, minimalist look */
+html, body, #root {
+  height: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-white text-slate-800 antialiased;
+}
+
+/***** utility for section spacing *****/
+.section-spacing {
+  @apply py-12 sm:py-16 lg:py-20;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-spacing { transition: none !important; }
+}
