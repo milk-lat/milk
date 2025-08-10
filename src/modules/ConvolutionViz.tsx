@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, memo } from 'react'
+import Notice from '../components/Notice'
 
 const INPUT_SIZE = 6
 const KERNEL_SIZE = 3
@@ -43,6 +44,7 @@ export default function ConvolutionViz() {
   )
   const [pos, setPos] = useState({ r: 0, c: 0 })
   const [isPlaying, setIsPlaying] = useState(true)
+  const [speedMs, setSpeedMs] = useState(500)
   const timerRef = useRef<number | null>(null)
 
   const step = () => {
@@ -70,11 +72,11 @@ export default function ConvolutionViz() {
 
   useEffect(() => {
     if (!isPlaying) return
-    timerRef.current = window.setInterval(step, 500)
+    timerRef.current = window.setInterval(step, speedMs)
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current)
     }
-  }, [pos, isPlaying])
+  }, [pos, isPlaying, speedMs])
 
   const reset = () => {
     setOutput(Array.from({ length: outputSize }, () => Array.from({ length: outputSize }, () => null)))
@@ -82,16 +84,26 @@ export default function ConvolutionViz() {
     setIsPlaying(true)
   }
 
+  const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
+      <Notice title="说明">演示 3×3 卷积核在输入特征图上的滑动与点积运算，实时生成输出。</Notice>
+      <div className="flex items-center gap-3 flex-wrap">
         <button className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors" onClick={() => setIsPlaying((p) => !p)}>
           {isPlaying ? '暂停' : '播放'}
         </button>
         <button className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors" onClick={reset}>
           重置
         </button>
+        <label className="ml-2 flex items-center gap-2 text-sm text-slate-700">
+          速度
+          <input type="range" min={150} max={1200} step={50} value={speedMs} onChange={(e) => setSpeedMs(parseInt(e.target.value))} className="w-40 accent-blue-600" />
+        </label>
       </div>
+      {isMobile && speedMs < 300 && (
+        <Notice tone="warning" title="性能提示">较快速度在手机上可能导致耗电或发热，必要时请降低速度。</Notice>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div>
           <h3 className="font-medium mb-3 text-slate-700">输入特征图 ({INPUT_SIZE}×{INPUT_SIZE})</h3>

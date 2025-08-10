@@ -4,6 +4,7 @@ const navItems = [
   { href: '#conv', label: '卷积层' },
   { href: '#nn', label: '神经网络' },
   { href: '#lm', label: '语言模型' },
+  { href: '#img', label: '图片分辨率' },
 ]
 
 export default function Header() {
@@ -33,7 +34,7 @@ export default function Header() {
           </svg>
         </button>
       </div>
-      <div className={["md:hidden overflow-hidden transition-[max-height,opacity] duration-500", open ? "max-h-48 opacity-100" : "max-h-0 opacity-0"].join(' ')}>
+      <div className={["md:hidden overflow-hidden transition-[max-height,opacity] duration-500", open ? "max-h-64 opacity-100" : "max-h-0 opacity-0"].join(' ')}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-2 flex flex-col gap-2 text-sm">
           {navItems.map((n) => (
             <a key={n.href} href={n.href} className="py-2 text-slate-700 hover:text-slate-900 transition-colors" onClick={() => setOpen(false)}>
