@@ -40,7 +40,6 @@ export default function NeuralNetworkViz() {
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      // pick a random path across layers
       const path: string[] = []
       let prevIndex = Math.floor(Math.random() * layers[0].length)
       path.push(`0-${prevIndex}`)
@@ -65,12 +64,12 @@ export default function NeuralNetworkViz() {
   return (
     <div className="w-full overflow-x-auto">
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full max-w-none">
-        {/* edges */}
         {edges.map((e) => {
           const [lf, nf] = e.from.split('-').map(Number)
           const [lt, nt] = e.to.split('-').map(Number)
           const p1 = layers[lf][nf]
           const p2 = layers[lt][nt]
+          const active = isEdgeActive(e.from, e.to)
           return (
             <line
               key={`${e.from}->${e.to}`}
@@ -78,14 +77,14 @@ export default function NeuralNetworkViz() {
               y1={p1.y}
               x2={p2.x}
               y2={p2.y}
-              stroke={isEdgeActive(e.from, e.to) ? '#2563eb' : '#cbd5e1'}
-              strokeWidth={isEdgeActive(e.from, e.to) ? 2.5 : 1}
-              opacity={isEdgeActive(e.from, e.to) ? 0.9 : 0.7}
+              stroke={active ? '#2563eb' : '#cbd5e1'}
+              strokeWidth={active ? 2.5 : 1}
+              opacity={active ? 0.95 : 0.6}
+              style={{ transition: 'stroke 300ms, stroke-width 300ms, opacity 300ms' }}
             />
           )
         })}
 
-        {/* nodes */}
         {layers.map((layer, l) => (
           <g key={l}>
             {layer.map((n, i) => {
@@ -93,7 +92,15 @@ export default function NeuralNetworkViz() {
               const active = isNodeActive(key)
               return (
                 <g key={key}>
-                  <circle cx={n.x} cy={n.y} r={10} fill={active ? '#1d4ed8' : '#ffffff'} stroke={active ? '#1d4ed8' : '#64748b'} strokeWidth={active ? 2 : 1.5} />
+                  <circle
+                    cx={n.x}
+                    cy={n.y}
+                    r={active ? 11 : 9.5}
+                    fill={active ? '#1d4ed8' : '#ffffff'}
+                    stroke={active ? '#1d4ed8' : '#64748b'}
+                    strokeWidth={active ? 2 : 1.5}
+                    style={{ transition: 'all 300ms', filter: active ? 'drop-shadow(0 0 6px rgba(29,78,216,0.35))' : 'none' }}
+                  />
                 </g>
               )
             })}

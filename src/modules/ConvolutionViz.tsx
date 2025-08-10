@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, memo } from 'react'
 
 const INPUT_SIZE = 6
 const KERNEL_SIZE = 3
@@ -70,7 +70,7 @@ export default function ConvolutionViz() {
 
   useEffect(() => {
     if (!isPlaying) return
-    timerRef.current = window.setInterval(step, 700)
+    timerRef.current = window.setInterval(step, 500)
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current)
     }
@@ -85,10 +85,10 @@ export default function ConvolutionViz() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <button className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50" onClick={() => setIsPlaying((p) => !p)}>
+        <button className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors" onClick={() => setIsPlaying((p) => !p)}>
           {isPlaying ? '暂停' : '播放'}
         </button>
-        <button className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50" onClick={reset}>
+        <button className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors" onClick={reset}>
           重置
         </button>
       </div>
@@ -117,7 +117,7 @@ type GridProps = {
   compact?: boolean
 }
 
-function Grid({ matrix, highlight, highlightOut, compact = false }: GridProps) {
+const Grid = memo(function Grid({ matrix, highlight, highlightOut, compact = false }: GridProps) {
   const cols = matrix[0].length
 
   return (
@@ -134,13 +134,13 @@ function Grid({ matrix, highlight, highlightOut, compact = false }: GridProps) {
             <div
               key={`${r}-${c}`}
               className={[
-                'flex items-center justify-center aspect-square border',
+                'flex items-center justify-center aspect-square border transition-all duration-300',
                 inHighlight ? 'border-blue-500 ring-2 ring-blue-300' : 'border-slate-200',
-                outHighlight ? 'bg-blue-50' : '',
+                outHighlight ? 'bg-blue-50' : 'bg-white',
                 'text-sm sm:text-base'
               ].join(' ')}
             >
-              <span className={isEmpty ? 'text-slate-300' : 'text-slate-800'}>
+              <span className={['transition-colors duration-300', isEmpty ? 'text-slate-300' : 'text-slate-800'].join(' ')}>
                 {isEmpty ? '-' : (cell as number)}
               </span>
             </div>
@@ -149,4 +149,4 @@ function Grid({ matrix, highlight, highlightOut, compact = false }: GridProps) {
       )}
     </div>
   )
-}
+})

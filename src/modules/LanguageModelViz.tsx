@@ -13,7 +13,6 @@ export default function LanguageModelViz() {
   const [qIndex, setQIndex] = useState(0)
 
   const attentionRows = useMemo(() => {
-    // causal attention: each position attends to <= itself with decaying weights
     return TOKENS.map((_, i) => {
       const scores = TOKENS.map((__, j) => (j <= i ? -0.4 * (i - j) : -Infinity))
       return softmax(scores)
@@ -23,7 +22,7 @@ export default function LanguageModelViz() {
   useEffect(() => {
     const id = window.setInterval(() => {
       setQIndex((i) => (i + 1) % TOKENS.length)
-    }, 1200)
+    }, 1000)
     return () => window.clearInterval(id)
   }, [])
 
@@ -34,7 +33,7 @@ export default function LanguageModelViz() {
           {TOKENS.map((t, i) => (
             <span
               key={i}
-              className={`px-3 py-1.5 rounded-full border ${i === qIndex ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-slate-300 text-slate-700'}`}
+              className={`px-3 py-1.5 rounded-full border transition-all ${i === qIndex ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
             >
               {t}
             </span>
@@ -52,11 +51,11 @@ export default function LanguageModelViz() {
               return (
                 <div
                   key={`${row}-${col}`}
-                  className={`aspect-square flex items-center justify-center border ${activeRow ? 'border-blue-300' : 'border-slate-200'}`}
+                  className={`aspect-square flex items-center justify-center border transition-all ${activeRow ? 'border-blue-300' : 'border-slate-200'}`}
                   style={{ backgroundColor: `rgba(37, 99, 235, ${activeRow ? val : 0.05})` }}
                   title={`q=${row}, k=${col}, w=${val.toFixed(2)}`}
                 >
-                  <span className={`text-[10px] ${activeRow ? 'text-white' : 'text-slate-600'}`}>{intensity}</span>
+                  <span className={`text-[10px] transition-colors ${activeRow ? 'text-white' : 'text-slate-600'}`}>{intensity}</span>
                 </div>
               )
             })
