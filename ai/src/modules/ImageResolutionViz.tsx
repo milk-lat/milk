@@ -1,36 +1,63 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Notice from '../components/Notice'
 
-function drawScene(ctx: CanvasRenderingContext2D, size: number) {
-  // background gradient
-  const grad = ctx.createLinearGradient(0, 0, size, size)
-  grad.addColorStop(0, '#e2e8f0')
-  grad.addColorStop(1, '#ffffff')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, size, size)
-  // shapes
-  ctx.fillStyle = '#2563eb'
-  ctx.beginPath()
-  ctx.arc(size * 0.3, size * 0.35, size * 0.16, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = '#22c55e'
-  ctx.fillRect(size * 0.55, size * 0.25, size * 0.25, size * 0.25)
-  ctx.fillStyle = '#f59e0b'
-  ctx.beginPath()
-  ctx.moveTo(size * 0.2, size * 0.75)
-  ctx.lineTo(size * 0.45, size * 0.55)
-  ctx.lineTo(size * 0.7, size * 0.85)
-  ctx.closePath()
-  ctx.fill()
-  // text
-  ctx.fillStyle = '#0f172a'
-  ctx.font = `${Math.floor(size * 0.08)}px system-ui, -apple-system, Segoe UI, Roboto`
-  ctx.fillText('AI', size * 0.62, size * 0.62)
+type SourceType = '几何' | '棋盘' | '噪声'
+type FilterType = '最近邻' | '双线性' | '双三次'
+
+function drawScene(ctx: CanvasRenderingContext2D, size: number, type: SourceType) {
+  ctx.clearRect(0, 0, size, size)
+  if (type === '几何') {
+    const grad = ctx.createLinearGradient(0, 0, size, size)
+    grad.addColorStop(0, '#e2e8f0')
+    grad.addColorStop(1, '#ffffff')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, size, size)
+    ctx.fillStyle = '#2563eb'
+    ctx.beginPath()
+    ctx.arc(size * 0.3, size * 0.35, size * 0.16, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#22c55e'
+    ctx.fillRect(size * 0.55, size * 0.25, size * 0.25, size * 0.25)
+    ctx.fillStyle = '#f59e0b'
+    ctx.beginPath()
+    ctx.moveTo(size * 0.2, size * 0.75)
+    ctx.lineTo(size * 0.45, size * 0.55)
+    ctx.lineTo(size * 0.7, size * 0.85)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = '#0f172a'
+    ctx.font = `${Math.floor(size * 0.08)}px system-ui, -apple-system, Segoe UI, Roboto`
+    ctx.fillText('AI', size * 0.62, size * 0.62)
+    return
+  }
+  if (type === '棋盘') {
+    const cells = 16
+    const cell = size / cells
+    for (let r = 0; r < cells; r++) {
+      for (let c = 0; c < cells; c++) {
+        ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#0f172a'
+        ctx.fillRect(Math.round(c * cell), Math.round(r * cell), Math.ceil(cell), Math.ceil(cell))
+      }
+    }
+    return
+  }
+  // 噪声
+  const imgData = ctx.createImageData(size, size)
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    const v = Math.floor(Math.random() * 256)
+    imgData.data[i] = v
+    imgData.data[i + 1] = v
+    imgData.data[i + 2] = v
+    imgData.data[i + 3] = 255
+  }
+  ctx.putImageData(imgData, 0, 0)
 }
 
 export default function ImageResolutionViz() {
   const displaySize = 360
   const sourceSize = 512
+  const [source, setSource] = useState<SourceType>('几何')
+  const [filter, setFilter] = useState<FilterType>('双线性')
   const [targetRes, setTargetRes] = useState(128)
   const [showGrid, setShowGrid] = useState(false)
 
@@ -38,10 +65,13 @@ export default function ImageResolutionViz() {
     const c = document.createElement('canvas')
     c.width = sourceSize
     c.height = sourceSize
-    const ctx = c.getContext('2d')!
-    drawScene(ctx, sourceSize)
     return c
   }, [])
+
+  useEffect(() => {
+    const ctx = srcCanvas.getContext('2d')!
+    drawScene(ctx, sourceSize, source)
+  }, [srcCanvas, source])
 
   const leftRef = useRef<HTMLCanvasElement | null>(null)
   const rightRef = useRef<HTMLCanvasElement | null>(null)
@@ -56,6 +86,7 @@ export default function ImageResolutionViz() {
 
     // left: original
     lctx.imageSmoothingEnabled = true
+    lctx.imageSmoothingQuality = 'high'
     lctx.clearRect(0, 0, displaySize, displaySize)
     lctx.drawImage(srcCanvas, 0, 0, displaySize, displaySize)
 
@@ -63,9 +94,20 @@ export default function ImageResolutionViz() {
     const tmp = document.createElement('canvas')
     tmp.width = tmp.height = targetRes
     const tctx = tmp.getContext('2d')!
-    tctx.imageSmoothingEnabled = true
     tctx.clearRect(0, 0, targetRes, targetRes)
-    tctx.drawImage(srcCanvas, 0, 0, targetRes, targetRes)
+
+    if (filter === '最近邻') {
+      tctx.imageSmoothingEnabled = false
+      tctx.drawImage(srcCanvas, 0, 0, targetRes, targetRes)
+    } else if (filter === '双线性') {
+      tctx.imageSmoothingEnabled = true
+      tctx.imageSmoothingQuality = 'medium'
+      tctx.drawImage(srcCanvas, 0, 0, targetRes, targetRes)
+    } else {
+      tctx.imageSmoothingEnabled = true
+      tctx.imageSmoothingQuality = 'high'
+      tctx.drawImage(srcCanvas, 0, 0, targetRes, targetRes)
+    }
 
     rctx.imageSmoothingEnabled = false
     rctx.clearRect(0, 0, displaySize, displaySize)
@@ -81,7 +123,7 @@ export default function ImageResolutionViz() {
         rctx.beginPath(); rctx.moveTo(0, p); rctx.lineTo(displaySize, p); rctx.stroke()
       }
     }
-  }, [srcCanvas, targetRes, showGrid])
+  }, [srcCanvas, targetRes, showGrid, filter])
 
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
   const heavy = targetRes >= 384
@@ -89,8 +131,26 @@ export default function ImageResolutionViz() {
   return (
     <div className="flex flex-col gap-4">
       <Notice title="说明">
-        左侧为原始图像，右侧为先缩小至目标分辨率再放大的效果，用于观察像素化与细节损失。
+        左侧为原始图像，右侧为先缩小至目标分辨率再放大的效果；可切换图片源与插值方式进行对比。
       </Notice>
+
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+        <label className="text-sm text-slate-700">图片源
+          <select value={source} onChange={(e) => setSource(e.target.value as SourceType)} className="ml-2 border border-slate-300 rounded px-2 py-1 text-sm">
+            <option>几何</option>
+            <option>棋盘</option>
+            <option>噪声</option>
+          </select>
+        </label>
+        <label className="text-sm text-slate-700">插值
+          <select value={filter} onChange={(e) => setFilter(e.target.value as FilterType)} className="ml-2 border border-slate-300 rounded px-2 py-1 text-sm">
+            <option>最近邻</option>
+            <option>双线性</option>
+            <option>双三次</option>
+          </select>
+        </label>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div>
           <div className="mb-2 text-sm text-slate-600">原始</div>

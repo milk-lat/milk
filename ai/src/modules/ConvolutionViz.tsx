@@ -3,7 +3,6 @@ import Notice from '../components/Notice'
 
 const INPUT_SIZE = 6
 const KERNEL_SIZE = 3
-const STRIDE = 1
 
 function generateMatrix(size: number): number[][] {
   return Array.from({ length: size }, () =>
@@ -11,11 +10,19 @@ function generateMatrix(size: number): number[][] {
   )
 }
 
-const DEFAULT_KERNEL: number[][] = [
-  [1, 0, -1],
-  [1, 0, -1],
-  [1, 0, -1],
-]
+const PRESETS: Record<string, number[][]> = {
+  '边缘(Sobel X)': [
+    [1, 0, -1],
+    [2, 0, -2],
+    [1, 0, -1],
+  ],
+  '锐化': [
+    [0, -1, 0],
+    [-1, 5, -1],
+    [0, -1, 0],
+  ],
+  '均值模糊': Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => 1 / 9)),
+}
 
 function dot(a: number[][], b: number[][]): number {
   let sum = 0
@@ -35,10 +42,29 @@ function sliceMatrix(m: number[][], r: number, c: number, size: number): number[
   return out
 }
 
+function padMatrix(m: number[][], padding: number): number[][] {
+  if (padding <= 0) return m
+  const n = m.length
+  const p = padding
+  const out = Array.from({ length: n + 2 * p }, () => Array.from({ length: n + 2 * p }, () => 0))
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      out[i + p][j + p] = m[i][j]
+    }
+  }
+  return out
+}
+
 export default function ConvolutionViz() {
   const input = useMemo(() => generateMatrix(INPUT_SIZE), [])
-  const kernel = DEFAULT_KERNEL
-  const outputSize = (INPUT_SIZE - KERNEL_SIZE) / STRIDE + 1
+  const [kernel, setKernel] = useState<number[][]>(PRESETS['边缘(Sobel X)'])
+  const [stride, setStride] = useState(1)
+  const [padding, setPadding] = useState(0)
+
+  const paddedInput = useMemo(() => padMatrix(input, padding), [input, padding])
+  const paddedSize = paddedInput.length
+  const outputSize = Math.floor((paddedSize - KERNEL_SIZE) / stride + 1)
+
   const [output, setOutput] = useState<(number | null)[][]>(
     Array.from({ length: outputSize }, () => Array.from({ length: outputSize }, () => null))
   )
@@ -47,9 +73,16 @@ export default function ConvolutionViz() {
   const [speedMs, setSpeedMs] = useState(500)
   const timerRef = useRef<number | null>(null)
 
+  useEffect(() => {
+    // when hyper-params change, reset the run
+    setOutput(Array.from({ length: outputSize }, () => Array.from({ length: outputSize }, () => null)))
+    setPos({ r: 0, c: 0 })
+    setIsPlaying(false)
+  }, [outputSize, kernel])
+
   const step = () => {
     const { r, c } = pos
-    const patch = sliceMatrix(input, r, c, KERNEL_SIZE)
+    const patch = sliceMatrix(paddedInput, r, c, KERNEL_SIZE)
     const val = dot(patch, kernel)
     setOutput((prev) => {
       const next = prev.map((row) => row.slice())
@@ -58,10 +91,10 @@ export default function ConvolutionViz() {
     })
 
     let nextR = r
-    let nextC = c + STRIDE
+    let nextC = c + stride
     if (nextC >= outputSize) {
       nextC = 0
-      nextR = r + STRIDE
+      nextR = r + stride
     }
     if (nextR >= outputSize) {
       setIsPlaying(false)
@@ -76,7 +109,7 @@ export default function ConvolutionViz() {
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current)
     }
-  }, [pos, isPlaying, speedMs])
+  }, [pos, isPlaying, speedMs, stride, paddedInput])
 
   const reset = () => {
     setOutput(Array.from({ length: outputSize }, () => Array.from({ length: outputSize }, () => null)))
@@ -86,9 +119,18 @@ export default function ConvolutionViz() {
 
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
 
+  const onKernelChange = (i: number, j: number, value: string) => {
+    const v = Number(value)
+    setKernel((k) => {
+      const next = k.map((row) => row.slice())
+      next[i][j] = isNaN(v) ? 0 : v
+      return next
+    })
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <Notice title="说明">演示 3×3 卷积核在输入特征图上的滑动与点积运算，实时生成输出。</Notice>
+      <Notice title="说明">演示 3×3 卷积核，支持编辑核、步幅与填充，实时观察输出变化。</Notice>
       <div className="flex items-center gap-3 flex-wrap">
         <button className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors" onClick={() => setIsPlaying((p) => !p)}>
           {isPlaying ? '暂停' : '播放'}
@@ -100,18 +142,34 @@ export default function ConvolutionViz() {
           速度
           <input type="range" min={150} max={1200} step={50} value={speedMs} onChange={(e) => setSpeedMs(parseInt(e.target.value))} className="w-40 accent-blue-600" />
         </label>
+        <label className="ml-1 flex items-center gap-2 text-sm text-slate-700">
+          步幅
+          <input type="number" min={1} max={3} value={stride} onChange={(e) => setStride(Math.max(1, Math.min(3, parseInt(e.target.value) || 1)))} className="w-16 border border-slate-300 rounded px-2 py-1" />
+        </label>
+        <label className="ml-1 flex items-center gap-2 text-sm text-slate-700">
+          填充
+          <input type="number" min={0} max={3} value={padding} onChange={(e) => setPadding(Math.max(0, Math.min(3, parseInt(e.target.value) || 0)))} className="w-16 border border-slate-300 rounded px-2 py-1" />
+        </label>
+        <label className="ml-1 text-sm text-slate-700 inline-flex items-center gap-2">
+          预设
+          <select onChange={(e) => setKernel(PRESETS[e.target.value] || kernel)} className="border border-slate-300 rounded px-2 py-1 text-sm">
+            {Object.keys(PRESETS).map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+        </label>
       </div>
       {isMobile && speedMs < 300 && (
         <Notice tone="warning" title="性能提示">较快速度在手机上可能导致耗电或发热，必要时请降低速度。</Notice>
       )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div>
-          <h3 className="font-medium mb-3 text-slate-700">输入特征图 ({INPUT_SIZE}×{INPUT_SIZE})</h3>
-          <Grid matrix={input} highlight={{ r: pos.r, c: pos.c, size: KERNEL_SIZE }} />
+          <h3 className="font-medium mb-3 text-slate-700">输入特征图 ({INPUT_SIZE}×{INPUT_SIZE}){padding > 0 ? `，填充 ${padding}` : ''}</h3>
+          <Grid matrix={input} highlight={padding > 0 ? { r: Math.max(0, pos.r - padding), c: Math.max(0, pos.c - padding), size: KERNEL_SIZE } : { r: pos.r, c: pos.c, size: KERNEL_SIZE }} />
         </div>
         <div>
-          <h3 className="font-medium mb-3 text-slate-700">卷积核 ({KERNEL_SIZE}×{KERNEL_SIZE})</h3>
-          <Grid matrix={kernel} compact />
+          <h3 className="font-medium mb-3 text-slate-700">卷积核 (可编辑)</h3>
+          <KernelEditor kernel={kernel} onChange={onKernelChange} />
         </div>
         <div>
           <h3 className="font-medium mb-3 text-slate-700">输出特征图 ({outputSize}×{outputSize})</h3>
@@ -153,7 +211,7 @@ const Grid = memo(function Grid({ matrix, highlight, highlightOut, compact = fal
               ].join(' ')}
             >
               <span className={['transition-colors duration-300', isEmpty ? 'text-slate-300' : 'text-slate-800'].join(' ')}>
-                {isEmpty ? '-' : (cell as number)}
+                {isEmpty ? '-' : (cell as number).toFixed && Math.abs((cell as number)) < 10 ? (cell as number).toFixed(1) : (cell as number)}
               </span>
             </div>
           )
@@ -162,3 +220,27 @@ const Grid = memo(function Grid({ matrix, highlight, highlightOut, compact = fal
     </div>
   )
 })
+
+type KernelEditorProps = {
+  kernel: number[][]
+  onChange: (i: number, j: number, value: string) => void
+}
+
+function KernelEditor({ kernel, onChange }: KernelEditorProps) {
+  return (
+    <div className="inline-grid" style={{ gridTemplateColumns: 'repeat(3, 56px)' }}>
+      {kernel.map((row, i) =>
+        row.map((v, j) => (
+          <input
+            key={`${i}-${j}`}
+            type="number"
+            step={0.1}
+            value={v}
+            onChange={(e) => onChange(i, j, e.target.value)}
+            className="w-14 h-14 text-center border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+          />
+        ))
+      )}
+    </div>
+  )
+}
