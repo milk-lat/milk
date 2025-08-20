@@ -1,13 +1,438 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-      <meta charset="UTF-8" />
-          <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                  <title>AI</title>
-                    </head>
-                      <body>
-                          <div id="root"></div>
-                              <script type="module" src="/src/main.tsx"></script>
-                                </body>
-                                </html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>函数拟合 & 神经网络可视化（响应式）</title>
+<style>
+  :root{
+    --bg:#f2f6fa;
+    --card:#fff;
+    --accent:#2b7cff;
+    --muted:#666;
+  }
+  html,body{height:100%; margin:0; font-family: "Helvetica Neue", Arial; background:var(--bg);}
+  .wrap{max-width:1100px; width:95%; margin:18px auto; display:flex; flex-direction:column; gap:12px; align-items:stretch;}
+  header{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;}
+  h1{font-size:18px;margin:0;color:#123;}
+  .top{display:flex; gap:12px; align-items:flex-start; width:100%;}
+  /* Canvas container: side-by-side on desktop, stacked on narrow screens */
+  .canvas-area{display:flex; gap:12px; align-items:flex-start; width:100%;}
+  .card{background:var(--card); border:1px solid #e1e6ee; border-radius:10px; padding:10px; box-shadow:0 2px 6px rgba(20,40,80,0.04);}
+  .left, .right{flex:1; min-width:220px;}
+  canvas{display:block; width:100%; height:360px; border-radius:6px;}
+  /* controls */
+  .controls{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px;}
+  label{font-size:13px; color:var(--muted);}
+  input[type=range]{vertical-align:middle;}
+  select{padding:6px;border-radius:6px;border:1px solid #ccc;}
+  button{padding:8px 12px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;}
+  button.secondary{background:#6c757d;}
+  .small{font-size:12px;color:var(--muted);}
+  #info{margin-top:8px;padding:10px;border-radius:8px;background:#fff;border:1px solid #eee;font-size:13px;}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .toggle{display:inline-flex;align-items:center;gap:6px;}
+  /* mobile: stack canvases vertically and reduce heights */
+  @media (max-width:800px){
+    .canvas-area{flex-direction:column;}
+    canvas{height:240px;}
+  }
+  @media (max-width:420px){
+    canvas{height:200px;}
+    button{padding:10px 14px;font-size:15px;}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>函数拟合 & 神经网络可视化（响应式）</h1>
+      <div class="small">隐藏单元: <span id="Hdisp">16</span> · 1 隐藏层 · tanh 激活</div>
+    </header>
+
+    <div class="canvas-area">
+      <div class="left card">
+        <canvas id="funcCanvas"></canvas>
+        <div class="controls" style="margin-top:8px;">
+          <label>目标函数:
+            <select id="fnSelect">
+              <option value="sin">sin(x)</option>
+              <option value="cos">cos(x)</option>
+              <option value="sinc">sinc(x) (sin(x)/x)</option>
+              <option value="square">x^2 / 10</option>
+              <option value="tanh">tanh(x/2)</option>
+              <option value="mixture">0.6*sin(x)+0.4*cos(2x)</option>
+            </select>
+          </label>
+
+          <label>学习率 lr:
+            <input id="lr" type="range" min="0.001" max="0.5" step="0.001" value="0.02">
+            <span id="lrVal" class="small">0.020</span>
+          </label>
+
+          <label>批次 batch:
+            <input id="batch" type="range" min="4" max="128" step="1" value="32">
+            <span id="batchVal" class="small">32</span>
+          </label>
+
+          <label>每帧 steps:
+            <input id="steps" type="range" min="1" max="30" step="1" value="3">
+            <span id="stepsVal" class="small">3</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="right card">
+        <canvas id="nnCanvas"></canvas>
+        <div class="controls" style="margin-top:8px;">
+          <button id="startBtn">开始训练</button>
+          <button id="pauseBtn" class="secondary">暂停/继续</button>
+          <button id="resetBtn" class="secondary">重置</button>
+
+          <label class="toggle">
+            <input id="showWeights" type="checkbox">
+            <span class="small">显示权重数值</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div id="info" class="card small">
+      <p id="status">状态：就绪。调整参数后点击“开始训练”。</p>
+      <p id="lossP">当前 Loss（MSE）：—</p>
+      <p>说明：右侧网络图中，连线颜色 <span style="color:red">红</span> = 正权重，<span style="color:blue">蓝</span> = 负权重，透明度与绝对值相关。你可以切换目标函数（左上）查看网络拟合效果。</p>
+      <p>提示：可把学习率调小以获得更稳定训练；步数越大训练更快但可能不稳定。每帧训练次数太大可能会导致卡顿，依照设备性能按需调节。</p>
+    </div>
+  </div>
+
+<script>
+/* ---------------- 初始化与响应式画布处理 ---------------- */
+const DPR = window.devicePixelRatio || 1;
+const funcCanvas = document.getElementById('funcCanvas');
+const fctx = funcCanvas.getContext('2d');
+const nnCanvas = document.getElementById('nnCanvas');
+const nctx = nnCanvas.getContext('2d');
+
+function resizeCanvasToDisplaySize(canvas){
+  // set CSS size remains; update backing store for DPR
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.round(rect.width * DPR);
+  const h = Math.round(rect.height * DPR);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(DPR,0,0,DPR,0,0); // scale drawing to CSS pixels
+  }
+}
+
+function onResize(){
+  resizeCanvasToDisplaySize(funcCanvas);
+  resizeCanvasToDisplaySize(nnCanvas);
+  renderAll(); // redraw responsively
+}
+window.addEventListener('resize', onResize);
+
+/* ---------------- 参数与网络定义 ---------------- */
+const FUNC_MIN = -6.0, FUNC_MAX = 6.0;
+let H = 16; // 隐藏单元数
+document.getElementById('Hdisp').textContent = H;
+
+let lr = parseFloat(document.getElementById('lr').value);
+let BATCH = parseInt(document.getElementById('batch').value);
+let STEPS = parseInt(document.getElementById('steps').value);
+let running = false;
+let animId = null;
+
+const lossP = document.getElementById('lossP');
+const statusP = document.getElementById('status');
+const lrVal = document.getElementById('lrVal');
+const batchVal = document.getElementById('batchVal');
+const stepsVal = document.getElementById('stepsVal');
+
+lrVal.textContent = lr.toFixed(3);
+batchVal.textContent = BATCH;
+stepsVal.textContent = STEPS;
+
+/* 目标函数集合 */
+function target_sin(x){ return Math.sin(x); }
+function target_cos(x){ return Math.cos(x); }
+function target_sinc(x){ return x===0? 1 : Math.sin(x)/x; }
+function target_square(x){ return (x*x)/10; }
+function target_tanh(x){ return Math.tanh(x/2); }
+function target_mixture(x){ return 0.6*Math.sin(x) + 0.4*Math.cos(2*x); }
+const fnMap = {
+  'sin': target_sin, 'cos': target_cos, 'sinc': target_sinc,
+  'square': target_square, 'tanh': target_tanh, 'mixture': target_mixture
+};
+let currentFnKey = document.getElementById('fnSelect').value;
+
+/* ======= 网络参数（1 隐藏层） ======= */
+let weights1 = []; // array of {w,b}
+let weights2 = []; // array of w2
+let bias2 = 0;
+
+function initNetwork(){
+  weights1 = new Array(H).fill(0).map(()=> ({w: (Math.random()*2-1)*0.6, b: (Math.random()*2-1)*0.6}) );
+  weights2 = new Array(H).fill(0).map(()=> (Math.random()*2-1)*0.6 );
+  bias2 = (Math.random()*2-1)*0.6;
+}
+initNetwork();
+
+/* ======= 帮助函数：map 到画布坐标（考虑 DPR） ======= */
+function mapXToFuncCanvas(x){
+  const rect = funcCanvas.getBoundingClientRect();
+  const left = 20, right = rect.width - 20;
+  const px = left + (x - FUNC_MIN) / (FUNC_MAX - FUNC_MIN) * (right - left);
+  return px;
+}
+function mapYToFuncCanvas(y){
+  const rect = funcCanvas.getBoundingClientRect();
+  const top = 20, bottom = rect.height - 20;
+  // assume y range roughly [-1.6,1.6] for plotting most functions; adjust if needed
+  const Ymin = -2.2, Ymax = 2.2;
+  const t = (y - Ymin) / (Ymax - Ymin);
+  return bottom - t * (bottom - top);
+}
+
+/* ======= 前向与梯度计算（与之前一致：tanh 隐藏） ======= */
+function forwardSingle(x){
+  const zs = new Array(H); const as = new Array(H);
+  for(let j=0;j<H;j++){
+    const z = weights1[j].w * x + weights1[j].b;
+    const a = Math.tanh(z);
+    zs[j] = z; as[j] = a;
+  }
+  let y = bias2;
+  for(let j=0;j<H;j++) y += weights2[j] * as[j];
+  return {y, zs, as};
+}
+
+function computeGradients(batchX){
+  let grad_w1 = new Array(H).fill(0);
+  let grad_b1 = new Array(H).fill(0);
+  let grad_w2 = new Array(H).fill(0);
+  let grad_b2 = 0;
+  let lossSum = 0;
+  const N = batchX.length;
+  for(let i=0;i<N;i++){
+    const x = batchX[i];
+    const t = fnMap[currentFnKey](x);
+    const {y, zs, as} = forwardSingle(x);
+    const err = y - t;
+    lossSum += err*err;
+    const dL_dy = 2 * err;
+    for(let j=0;j<H;j++){
+      grad_w2[j] += dL_dy * as[j];
+    }
+    grad_b2 += dL_dy;
+    for(let j=0;j<H;j++){
+      const dz = dL_dy * weights2[j] * (1 - as[j]*as[j]); // tanh' = 1 - tanh^2
+      grad_w1[j] += dz * x;
+      grad_b1[j] += dz;
+    }
+  }
+  for(let j=0;j<H;j++){
+    grad_w2[j] /= N;
+    grad_w1[j] /= N;
+    grad_b1[j] /= N;
+  }
+  grad_b2 /= N;
+  return {grad_w1, grad_b1, grad_w2, grad_b2, loss: lossSum / N};
+}
+
+function stepSGD(batchX, lr){
+  const g = computeGradients(batchX);
+  for(let j=0;j<H;j++){
+    weights2[j] -= lr * g.grad_w2[j];
+    weights1[j].w -= lr * g.grad_w1[j];
+    weights1[j].b -= lr * g.grad_b1[j];
+  }
+  bias2 -= lr * g.grad_b2;
+  return g.loss;
+}
+
+/* ======= 绘图：函数图（目标+预测） ======= */
+function drawFuncAxes(){
+  const rect = funcCanvas.getBoundingClientRect();
+  const ctx = fctx;
+  ctx.clearRect(0,0,rect.width,rect.height);
+  // background
+  ctx.fillStyle = "#fff"; ctx.fillRect(0,0,rect.width,rect.height);
+  // grid lines
+  ctx.strokeStyle = "#eee"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for(let gx=Math.ceil(FUNC_MIN); gx<=Math.floor(FUNC_MAX); gx++){
+    const px = mapXToFuncCanvas(gx);
+    ctx.moveTo(px, 20); ctx.lineTo(px, rect.height-20);
+  }
+  for(let gy=-2; gy<=2; gy++){
+    const py = mapYToFuncCanvas(gy);
+    ctx.moveTo(20, py); ctx.lineTo(rect.width-20, py);
+  }
+  ctx.stroke();
+  // axes
+  ctx.strokeStyle = "#bbb"; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(mapXToFuncCanvas(FUNC_MIN), mapYToFuncCanvas(0));
+  ctx.lineTo(mapXToFuncCanvas(FUNC_MAX), mapYToFuncCanvas(0));
+  ctx.stroke();
+}
+
+function plotTargetFunction(){
+  const rect = funcCanvas.getBoundingClientRect();
+  fctx.lineWidth = 2;
+  fctx.strokeStyle = "blue";
+  fctx.beginPath(); let started=false;
+  for(let x=FUNC_MIN; x<=FUNC_MAX; x+=0.01){
+    const y = fnMap[currentFnKey](x);
+    const px = mapXToFuncCanvas(x), py = mapYToFuncCanvas(y);
+    if(!started){ fctx.moveTo(px,py); started=true; } else fctx.lineTo(px,py);
+  }
+  fctx.stroke();
+}
+
+function plotPrediction(){
+  fctx.lineWidth = 2;
+  fctx.strokeStyle = "rgba(255,0,0,0.95)";
+  fctx.beginPath(); let started=false;
+  for(let x=FUNC_MIN; x<=FUNC_MAX; x+=0.02){
+    const y = forwardSingle(x).y;
+    const px = mapXToFuncCanvas(x), py = mapYToFuncCanvas(y);
+    if(!started){ fctx.moveTo(px,py); started=true; } else fctx.lineTo(px,py);
+  }
+  fctx.stroke();
+}
+
+/* ======= 绘制神经网络（位置自适应，避免遮挡） ======= */
+function drawNetworkVisualization(showWeights=false){
+  const rect = nnCanvas.getBoundingClientRect();
+  const ctx = nctx;
+  ctx.clearRect(0,0,rect.width,rect.height);
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,rect.width,rect.height);
+
+  // compute positions: input left middle, hidden column middle, output right middle
+  const inX = Math.round(rect.width * 0.08), inY = Math.round(rect.height/2);
+  const hidX = Math.round(rect.width * 0.45);
+  const outX = Math.round(rect.width * 0.85), outY = Math.round(rect.height/2);
+
+  // place H hidden nodes vertically spaced to avoid overlap
+  const marginTop = 30, marginBottom = 30;
+  const avail = rect.height - marginTop - marginBottom;
+  const step = avail / Math.max(H,1);
+  const positions = [];
+  for(let j=0;j<H;j++){
+    const y = Math.round(marginTop + (j + 0.5) * step);
+    positions.push({x:hidX, y: y});
+  }
+
+  // draw input node
+  ctx.fillStyle = "#cfe8ff"; ctx.beginPath(); ctx.arc(inX, inY, 18,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle="#000"; ctx.font = "14px Arial"; ctx.fillText("x", inX-6, inY+6);
+
+  // draw hidden nodes
+  ctx.font = (12) + "px Arial";
+  for(let j=0;j<H;j++){
+    const p = positions[j];
+    ctx.fillStyle = "#e6ffe6"; ctx.beginPath(); ctx.arc(p.x, p.y, 12,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle="#000";
+    // label small
+    ctx.fillText("h"+(j+1), p.x-12, p.y+4);
+  }
+
+  // draw output node
+  ctx.fillStyle = "#ffe6cc"; ctx.beginPath(); ctx.arc(outX, outY, 18,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle="#000"; ctx.fillText("y", outX-6, outY+6);
+
+  // draw lines input->hidden w1
+  for(let j=0;j<H;j++){
+    const p = positions[j];
+    const w1 = weights1[j].w;
+    const alpha = Math.min(Math.abs(w1)/1.5, 0.95);
+    const col = w1>=0? `rgba(200,0,0,${alpha})` : `rgba(0,60,200,${alpha})`;
+    ctx.beginPath(); ctx.moveTo(inX+14, inY); ctx.lineTo(p.x-12, p.y); ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, 1.2*Math.abs(w1)); ctx.stroke();
+    if(showWeights){
+      ctx.fillStyle="#000"; ctx.font="11px Arial";
+      ctx.fillText(w1.toFixed(2), Math.round((inX+p.x)/2)-10, Math.round((inY+p.y)/2)-4);
+    }
+  }
+  // draw lines hidden->output w2
+  for(let j=0;j<H;j++){
+    const p = positions[j];
+    const w2 = weights2[j];
+    const alpha = Math.min(Math.abs(w2)/1.5, 0.95);
+    const col = w2>=0? `rgba(200,0,0,${alpha})` : `rgba(0,60,200,${alpha})`;
+    ctx.beginPath(); ctx.moveTo(p.x+12, p.y); ctx.lineTo(outX-14, outY); ctx.strokeStyle = col; ctx.lineWidth = Math.max(1,1.2*Math.abs(w2)); ctx.stroke();
+    if(showWeights){
+      ctx.fillStyle="#000"; ctx.font="11px Arial";
+      ctx.fillText(w2.toFixed(2), Math.round((p.x+outX)/2)+2, Math.round((p.y+outY)/2)-4);
+    }
+  }
+  // show bias2
+  ctx.fillStyle="#000"; ctx.font="12px Arial";
+  ctx.fillText("bias: " + bias2.toFixed(3), outX-40, outY+38);
+}
+
+/* ======= 训练控制与渲染 ======= */
+function randomBatch(batchSize){
+  const arr = new Array(batchSize);
+  for(let i=0;i<batchSize;i++) arr[i] = Math.random() * (FUNC_MAX - FUNC_MIN) + FUNC_MIN;
+  return arr;
+}
+
+function renderAll(){
+  drawFuncAxes();
+  plotTargetFunction();
+  plotPrediction();
+  drawNetworkVisualization(document.getElementById('showWeights').checked);
+}
+
+function trainStep(){
+  for(let s=0;s<STEPS;s++){
+    const batch = randomBatch(BATCH);
+    const loss = stepSGD(batch, lr);
+    lossP.textContent = `当前 Loss（MSE，batch）: ${loss.toFixed(6)}`;
+  }
+  renderAll();
+}
+
+function loop(){
+  if(!running) return;
+  trainStep();
+  animId = requestAnimationFrame(loop);
+}
+
+/* ======= UI 事件 ======= */
+document.getElementById('lr').addEventListener('input', (e)=>{ lr = parseFloat(e.target.value); lrVal.textContent = lr.toFixed(3); });
+document.getElementById('batch').addEventListener('input', (e)=>{ BATCH = parseInt(e.target.value); batchVal.textContent = BATCH; });
+document.getElementById('steps').addEventListener('input', (e)=>{ STEPS = parseInt(e.target.value); stepsVal.textContent = STEPS; });
+
+document.getElementById('fnSelect').addEventListener('change', (e)=>{ currentFnKey = e.target.value; renderAll(); });
+
+document.getElementById('showWeights').addEventListener('change', ()=>{ renderAll(); });
+
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  if(!running){
+    running = true; statusP.textContent = "状态：训练中...";
+    loop();
+  }
+});
+document.getElementById('pauseBtn').addEventListener('click', ()=>{
+  running = !running;
+  statusP.textContent = running? "状态：训练中..." : "状态：已暂停";
+  if(running) loop();
+});
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  initNetwork();
+  statusP.textContent = "状态：已重置";
+  lossP.textContent = "";
+  renderAll();
+});
+
+/* initial resize + draw */
+onResize();
+renderAll();
+
+</script>
+</body>
+</html>
